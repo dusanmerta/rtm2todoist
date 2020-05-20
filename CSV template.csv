@@ -1,0 +1,6 @@
+TYPE,CONTENT,PRIORITY,INDENT,AUTHOR,RESPONSIBLE,DATE,DATE_LANG,TIMEZONE
+task,Call that very important client,1,1,,,today @ 11:00,en,
+note,Only available on Tuesdays and Thursdays,,,,,,,
+task,**Household chores**:,4,1,,,,,
+task,Clean the house,4,2,,,every month,en,
+task,Take out the trash3,2,,,every Friday,en,

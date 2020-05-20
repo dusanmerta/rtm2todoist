@@ -1,0 +1,99 @@
+---
+title: "Remember The Milk"
+output: html_notebook
+---
+
+```{r setup}
+library(tidyverse)
+library(jsonlite)
+library(lubridate)
+library(forcats)
+```
+
+
+```{r}
+data <- fromJSON("rememberthemilk_export_2020-05-19T07_10_40.008Z.json", bigint_as_char = T)
+```
+
+```{r}
+l <- data$lists %>% 
+  mutate_at(vars(contains("date")), function(x){as_datetime(x/1000)}) %>%
+  filter(is.na(date_archived))
+
+t <- data$tasks %>%
+  mutate_at(vars(date_created, date_added, date_modified, date_completed, date_due, date_start), 
+            function(x){as_date(as_datetime(x / 1000 + 3 * 3600))}) %>%
+  filter(is.na(date_completed)) %>%
+  mutate(priority = fct_recode(as_factor(priority), "1" = "P1", "2" = "P2", "3" = "P3", "4" = "PN"))
+
+t$tags <- sapply(t$tags, function(x) {paste(x, collapse = " @")})
+
+t <- t %>%
+  mutate(tags = ifelse(tags =="", "", paste("@", tags, sep = ""))) %>%
+  mutate_all(as.character)
+```
+
+
+```{r}
+task2todoist <- function(x, intent = 1) {
+  name <- str_replace_all(x[["name"]], ",", ";")
+  name <- str_replace_all(name, "@", "_")
+  if (!is.na(x[["url"]])) {
+    name <- paste(x[["url"]], " (", name, ")", sep = "")
+  }
+  name <- paste(name, x[["tags"]])
+  
+  date_due <- ""
+  if (!is.na(x[["date_due"]])) date_due <- x[["date_due"]]
+  
+  d <- tibble(TYPE = "task", 
+              CONTENT = name,
+              PRIORITY = x[["priority"]],
+              INDENT = as.character(intent),
+              AUTHOR = "",
+              RESPONSIBLE = "",
+              DATE = date_due,
+              DATE_LANG = "en",
+              TIMEZONE = "")
+  
+  todoist <<- bind_rows(todoist, d)
+  
+  # podúkoly
+  tt <- t %>% filter(x[["id"]] == parent_id) # všechny podúkoly daného úkolu
+  if (nrow(tt) > 0) {
+    for (j in 1:nrow(tt)) { # cyklus přes všechny úkoly ze seznamu
+      task2todoist(tt[j,], intent = intent + 1)
+    }
+  }
+  
+}
+```
+
+
+```{r}
+todoist <- tibble()
+for (i in 1:nrow(l)) { # cyklus přes všechny seznamy - vytvoří sekce
+  d <- tibble(TYPE = "section", 
+              CONTENT = str_replace_all(l[i, "name"], ",", ";"),
+              PRIORITY = "",
+              INDENT = "",
+              AUTHOR = "",
+              RESPONSIBLE = "",
+              DATE = "",
+              DATE_LANG = "en",
+              TIMEZONE = "")
+  todoist <- bind_rows(todoist, d)
+  
+  id_ <- l[i, "id"]
+  
+  tt <- t %>% filter(list_id == id_, is.na(parent_id)) # všechny úkoly daného seznamu bez podúkolů
+  if (nrow(tt) > 0) {
+    for (j in 1:nrow(tt)) { # cyklus přes všechny úkoly ze seznamu
+      task2todoist(tt[j,])
+    }
+  }
+}
+
+write_csv(todoist, "todoist.csv")
+```
+
